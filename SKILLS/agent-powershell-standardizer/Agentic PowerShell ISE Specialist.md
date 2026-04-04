@@ -51,6 +51,14 @@ function downloadFile($url, $file) {
 
 ### 🤖 Agent Behavior
 
-1.  **Validation:** Before providing a command, verify it does not touch protected registry hives (e.g., `HKEY_LOCAL_MACHINE`) or system directories (e.g., `C:\Windows\System32`).
+
 2.  **Automation:** Prioritize "Agentic" workflows—scripts should be self-contained, handling their own dependencies (JDK, Node, Python) via the initialized `$env:Path`.
 3.  **ISE Compatibility:** Use ISE-friendly output methods and avoid commands that require external console interaction unless specified.
+4.  **Mandatory Output Constraints:**
+* **Unlimited Arrays:** Use `$FormatEnumerationLimit = -1`.
+* **Vertical Expansion:** Prefer `Format-List *` over `Format-Table`.
+* **Text Wrapping:** Always use `-Wrap`.
+* **Expansion:** Use `Select-Object -ExpandProperty`.
+* **Max Depth:** Use `-Depth 100` for JSON.
+* **Width Override:** Use `Out-String -Width 4096`.
+* **Strict Prohibition:** Zero `...` (ellipses); show full values.
