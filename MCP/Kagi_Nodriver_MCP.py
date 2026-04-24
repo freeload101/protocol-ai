@@ -11,34 +11,11 @@ from mcp.types import Tool, TextContent
 import nodriver
 from markdownify import markdownify as md
 
+# Requirements file for Kagi Nodriver MCP
+# This ensures the correct nodriver version is used
 
-```
-
-Requirements file for Kagi Nodriver MCP
-This ensures the correct nodriver version is used
-
-Chromium installed in the working path .\Chromium\
-pip install nodriver==0.47.0 markdownify mcp
-
-PROMPT:
-Do research use chain of thought reasoning DeCRiM. Only reference authoritative resource using the MCP tool call kagi-search and stack overflow are not considered authoritative resource for fixerrors. 
-
-{
-	"mcpServers": {
-		"kagi-search": {
-			"command": "python",
-			"args": [
-				"C:\\backup\\JAMBOREE_CODE_MCP\\Kagi_Nodriver_MCP.py"
-			],
-			"env": {},
-			"alwaysAllow": [
-				"kagi_search"
-			],
-			"disabled": false
-		}
-	}
-}
-```
+# Chromium installed in the working path .\Chromium\
+# nodriver==0.47.0 markdownify mcp
 
 
 # Log to file — never to stdout (stdout is reserved for MCP JSON-RPC)
@@ -62,7 +39,6 @@ async def launch_browser():
         user_data_dir=USER_DATA_DIR,
         browser_executable_path=BROWSER_PATH,
         browser_args=["--some-browser-arg=true"],
-        
         lang="en-US",
         no_sandbox=True,
     )
@@ -78,7 +54,7 @@ async def run_search(search_query: str, lines_to_return: int, verbose: bool) -> 
     current_run_ref_files: list[str] = []
 
     try:
-        tab = await browser.get(f"https://kagi.com/search?token=jvQFIREDACTEDrlrmXdc&q={search_query}")
+        tab = await browser.get(f"https://kagi.com/search?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAADERPAAAAAAAAAAAAAA&q={search_query}")
         await asyncio.sleep(random.randint(1, 2))
 
         # Click Quick Answer button
@@ -154,7 +130,7 @@ async def run_search(search_query: str, lines_to_return: int, verbose: bool) -> 
         else:
             log.warning("No reference links found")
 
-        # Export Quick Answer content to markdown
+        # Export Quick Answer content to markdown (saved to disk only, not returned to LLM)
         content_script = """
             (() => {
                 const contentBox = document.querySelector('.qa-content')
@@ -168,21 +144,15 @@ async def run_search(search_query: str, lines_to_return: int, verbose: bool) -> 
             markdown_content = md(html_content)
             with open(qa_filepath, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            log.info("Saved Quick Answer content to quick_answer_output.md")
+            log.info("Saved Quick Answer content to quick_answer_output.md (excluded from LLM output)")
         except Exception as e:
             log.error(f"Failed to export Quick Answer: {e}\n{traceback.format_exc()}")
-            markdown_content = ""
-            qa_filepath = None
 
         await asyncio.sleep(1)
 
-        # Build return string using only current-run files
+        # Build return string using only current-run reference files
+        # quick_answer_output.md is intentionally excluded from LLM output
         output_parts = []
-
-        if qa_filepath and os.path.exists(qa_filepath):
-            with open(qa_filepath, "r", encoding="utf-8") as f:
-                qa_content = f.read()
-            output_parts.append("## Quick Answer\n\n" + qa_content)
 
         # Sort by reference index (reference_1_..., reference_2_..., etc.)
         for ref_file in sorted(current_run_ref_files, key=lambda x: int(x.split("_")[1])):
@@ -230,7 +200,7 @@ async def list_tools() -> list[Tool]:
                     "lines_to_return": {
                         "type": "integer",
                         "description": "Approximate number of lines to return per reference file (0 = full content).",
-                        "default": 20,
+                        "default": 200,
                     },
                     "verbose": {
                         "type": "boolean",
