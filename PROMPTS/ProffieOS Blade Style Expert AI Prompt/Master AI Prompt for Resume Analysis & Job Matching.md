@@ -407,3 +407,163 @@ if __name__ == "__main__":
 **ATS-Optimized**: Focuses on keyword matching and frequency analysis that ATS systems use 
 
 **Quantitative Scoring**: Generates match percentages and impact ratings
+
+
+
+Professional Resume Analysis: Compressed / Resume / Applicant Tracking Systems (ATS) Skillsyncer
+Comprehensive prompt for resume optimization including resume in a single prompt !
+
+You are an expert ATS analyzer and resume optimization consultant. Analyze the RESUME against the JOB DESCRIPTION and generate a structured report.
+
+## INPUTS
+- RESUME: [full resume text]
+- JOB DESCRIPTION: [full job posting text]
+
+## ANALYSIS
+
+### 1. OVERALL MATCH
+- Score (0-100%); level: Not Competitive (<70%) | Competitive (70-85%) | Highly Competitive (>85%)
+- Executive summary: key strengths and gaps (2-3 sentences)
+
+### 2. SKILLS ANALYSIS
+Perform for each category: Hard | Soft | Other (industry terms, culture keywords, tools/platforms)
+- Extract required skills from JD
+- List matched skills with resume frequency count
+- List missing skills with impact priority (High/Medium/Low)
+- Flag underrepresented skills (present but low frequency)
+- Calculate category match %
+- Soft skills only: provide contextual examples of where to add missing skills
+
+### 3. KEYWORD TABLE
+| KEYWORD | TYPE (Hard/Soft/Other) | SCORE (0-100%) | RESUME COUNT | JOB COUNT |
+
+### 4. RESUME QUALITY CHECKS
+| Check | Action |
+|---|---|
+| Job Title | Present? If not, suggest optimization. |
+| Quantifiable Achievements | Count, list, identify gaps, suggest additions. |
+| Weak Language | Flag filler words (just, various, always, etc.) for removal. |
+| Action Verbs | Flag weak/passive verbs; map to stronger alternatives. |
+| First-Person Pronouns | Flag I/me/my/we; provide rephrased versions. |
+| Formatting | Verify contact info, date consistency, word count (optimal: 400-600), readability. |
+
+### 5. RECOMMENDATIONS
+- **HIGH IMPACT**: Top 3-5 missing hard skills, critical keyword gaps, major formatting issues
+- **MEDIUM IMPACT**: Missing soft skills, frequency optimization, quantifiable achievements
+- **LOW IMPACT**: Language polish, minor keywords, style
+
+### 6. PYTHON VISUALIZATIONS
+Generate complete, executable code. Replace all placeholder values with actual data from the resume and JD.
+
+```python
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+import pandas as pd
+from matplotlib.patches import Wedge, Patch
+import warnings
+warnings.filterwarnings(&#x27;ignore&#x27;)
+plt.style.use(&#x27;seaborn-v0_8-darkgrid&#x27;)
+sns.set_palette(&quot;husl&quot;)
+
+# A. MATCH SCORE GAUGE
+def create_match_gauge(score):
+    fig, ax = plt.subplots(figsize=(8, 4))
+    for color, (b1, b2) in zip([&#x27;#d62728&#x27;,&#x27;#ff7f0e&#x27;,&#x27;#2ca02c&#x27;], [(0,70),(70,85),(85,100)]):
+        t1, t2 = np.radians(180-b1*1.8), np.radians(180-b2*1.8)
+        ax.add_patch(Wedge((0.5,0), 0.4, np.degrees(t1), np.degrees(t2), width=0.1, facecolor=color, alpha=0.3))
+    angle = np.radians(180 - score*1.8)
+    ax.plot([0.5, 0.5+0.35*np.cos(angle)], [0, 0.35*np.sin(angle)], &#x27;k-&#x27;, lw=3)
+    ax.text(0.5,-0.15,f&#x27;{score}%&#x27;,ha=&#x27;center&#x27;,fontsize=24,fontweight=&#x27;bold&#x27;)
+    ax.text(0.5,-0.25,&#x27;Match Score&#x27;,ha=&#x27;center&#x27;,fontsize=12)
+    ax.set_xlim(0,1); ax.set_ylim(-0.3,0.5); ax.axis(&#x27;off&#x27;)
+    plt.title(&#x27;Resume-Job Match Score&#x27;,fontsize=16,fontweight=&#x27;bold&#x27;,pad=20)
+    return fig
+
+# B. SKILLS BREAKDOWN
+def create_skills_breakdown(hard_match, soft_match, other_match, hard_missing, soft_missing, other_missing):
+    categories = [&#x27;Hard Skills&#x27;,&#x27;Soft Skills&#x27;,&#x27;Other Skills&#x27;]
+    matched = [hard_match, soft_match, other_match]
+    missing = [hard_missing, soft_missing, other_missing]
+    fig, ax = plt.subplots(figsize=(10,6))
+    x = np.arange(len(categories)); w = 0.35
+    ax.barh(x-w/2, matched, w, label=&#x27;Matched&#x27;, color=&#x27;#2ca02c&#x27;)
+    ax.barh(x+w/2, missing, w, label=&#x27;Missing&#x27;, color=&#x27;#d62728&#x27;)
+    ax.set_yticks(x); ax.set_yticklabels(categories)
+    ax.set_title(&#x27;Skills: Matched vs Missing&#x27;,fontsize=16,fontweight=&#x27;bold&#x27;)
+    ax.legend(); plt.tight_layout()
+    return fig
+
+# C. KEYWORD HEATMAP (keywords_df cols: keyword, resume_count, job_count, type)
+def create_keyword_heatmap(keywords_df):
+    top = keywords_df.nlargest(20,&#x27;job_count&#x27;)
+    fig, ax = plt.subplots(figsize=(10,12))
+    data = top[[&#x27;resume_count&#x27;,&#x27;job_count&#x27;]].T
+    data.columns = top[&#x27;keyword&#x27;]
+    sns.heatmap(data, annot=True, fmt=&#x27;d&#x27;, cmap=&#x27;RdYlGn&#x27;, ax=ax)
+    ax.set_yticklabels([&#x27;Your Resume&#x27;,&#x27;Job Description&#x27;],rotation=0)
+    plt.title(&#x27;Top 20 Keywords: Frequency Comparison&#x27;,fontsize=16,fontweight=&#x27;bold&#x27;,pad=20)
+    plt.tight_layout(); return fig
+
+# D. RADAR CHART
+def create_radar_chart(categories, scores):
+    angles = np.linspace(0,2*np.pi,len(categories),endpoint=False).tolist()
+    s = scores+[scores[0]]; angles += angles[:1]
+    fig, ax = plt.subplots(figsize=(8,8), subplot_kw=dict(projection=&#x27;polar&#x27;))
+    ax.plot(angles,s,&#x27;o-&#x27;,lw=2,color=&#x27;#2ca02c&#x27;); ax.fill(angles,s,alpha=0.25,color=&#x27;#2ca02c&#x27;)
+    ax.set_xticks(angles[:-1]); ax.set_xticklabels(categories,size=10); ax.set_ylim(0,100)
+    plt.title(&#x27;Resume Strength Analysis&#x27;,size=16,fontweight=&#x27;bold&#x27;,pad=20)
+    return fig
+
+# E. MISSING SKILLS PRIORITY (missing_df cols: skill, impact 1-10, type)
+def create_priority_chart(missing_df):
+    top = missing_df.nlargest(10,&#x27;impact&#x27;)
+    colors = {&#x27;Hard&#x27;:&#x27;#1f77b4&#x27;,&#x27;Soft&#x27;:&#x27;#ff7f0e&#x27;,&#x27;Other&#x27;:&#x27;#2ca02c&#x27;}
+    fig, ax = plt.subplots(figsize=(10,8))
+    ax.barh(range(len(top)), top[&#x27;impact&#x27;], color=[colors[t] for t in top[&#x27;type&#x27;]])
+    ax.set_yticks(range(len(top))); ax.set_yticklabels(top[&#x27;skill&#x27;]); ax.invert_yaxis()
+    ax.set_title(&#x27;Top 10 Missing Skills by Impact&#x27;,fontsize=16,fontweight=&#x27;bold&#x27;)
+    ax.legend(handles=[Patch(facecolor=v,label=k) for k,v in colors.items()],loc=&#x27;lower right&#x27;)
+    plt.tight_layout(); return fig
+
+# USAGE (replace with actual analysis data)
+if __name__ == &quot;__main__&quot;:
+    for fig, name in [
+        (create_match_gauge(78), &#x27;match_gauge&#x27;),
+        (create_skills_breakdown(15,8,12,9,5,6), &#x27;skills_breakdown&#x27;),
+        (create_keyword_heatmap(pd.DataFrame({&#x27;keyword&#x27;:[&#x27;Python&#x27;,&#x27;Leadership&#x27;,&#x27;Agile&#x27;,&#x27;Testing&#x27;,&#x27;SQL&#x27;],&#x27;resume_count&#x27;:[3,2,0,5,2],&#x27;job_count&#x27;:[5,3,4,6,3],&#x27;type&#x27;:[&#x27;Hard&#x27;,&#x27;Soft&#x27;,&#x27;Other&#x27;,&#x27;Hard&#x27;,&#x27;Hard&#x27;]})), &#x27;keyword_heatmap&#x27;),
+        (create_radar_chart([&#x27;Hard Skills&#x27;,&#x27;Soft Skills&#x27;,&#x27;Keywords&#x27;,&#x27;Format&#x27;,&#x27;Accomplishments&#x27;],[75,60,80,95,70]), &#x27;radar_chart&#x27;),
+        (create_priority_chart(pd.DataFrame({&#x27;skill&#x27;:[&#x27;Linux&#x27;,&#x27;Collaborate&#x27;,&#x27;Infrastructure&#x27;,&#x27;Product&#x27;,&#x27;Protocols&#x27;],&#x27;impact&#x27;:[10,8,7,6,6],&#x27;type&#x27;:[&#x27;Hard&#x27;,&#x27;Soft&#x27;,&#x27;Other&#x27;,&#x27;Other&#x27;,&#x27;Other&#x27;]})), &#x27;priority_chart&#x27;)
+    ]:
+        plt.savefig(f&#x27;{name}.png&#x27;, dpi=300, bbox_inches=&#x27;tight&#x27;); plt.show()
+
+
+
+
+Here is my resume:
+
+RESUME CONTEXT: Robert McCurdy | Roswell, GA | 404-647-4250 | RMcCurdyjob@gmail.com | linkedin.com/in/rmccurdy1
+
+ROLE: Senior offensive security engineer and AI/ML security researcher with 15+ years experience in penetration testing, red team operations, vulnerability management, and security automation.
+
+EXPERIENCE:
+- Abira Security (Jul 2025–present): Senior Security Engineer. 20+ assessments (network, web, API, mobile, cloud, thick-client); Critical/High findings 80% of engagements; domain admin access within 24hrs on 2,000+ host networks via SMB relay, service account hijacking, cloud compromise; EDR bypass (CrowdStrike, ThreatLocker, forced VPN) via custom PowerShell; AI-assisted pentest workflows using LLMs reducing documentation 2–4hrs/assessment; maintains JAMBOREE Android pentest framework (241 stars, 28 forks) and CrowdStrike RTR PowerShell repo (82 stars, 8 forks).
+- AI/ML Security Research (personal): LLM jailbreak disclosures to AT&T and major vendors; adversarial prompt engineering repo; deepfake/voice cloning research; PyTorch model fine-tuning on self-hosted GPU; AI security workshops for schools/community orgs.
+- Newell Brands (Jan 2019–Mar 2025): Cybersecurity Specialist. Tier 3 SOC escalation; custom API integrations (ZeroFox, CrowdStrike, Azure, Mimecast, Microsoft MDE); first scalable IR capability for the org; lead security engineer for detection and automation.
+- SunTrust (Nov 2016–Mar 2018): Manager, Vuln Mgmt & Red Team. Built inaugural red team and vuln mgmt team; scan duration reduced from 3 weeks to 3 days; automated remediation below 90-day SLA; hired 4 personnel.
+- KPMG (Jun 2010–Sep 2016): Cyber Risk Specialist. Pentesting, red team, compliance across government, SCADA, and enterprise; managed Atlanta pentest lab; evaluated 7+ IDS/IPS vendors; SECCDC red team participant.
+- NRI Construction (Jul 2008–Jun 2010): IT/security support; Zenoss, Nagios, Snort/Nessus deployment; network, firewall, email, PBX, and badge systems.
+
+SKILLS: Burp Suite, Metasploit, Nmap, OpenVAS, Wireshark, CrowdStrike, Splunk SOAR, Archer GRC, CarbonBlack, Velociraptor, PyTorch, TensorFlow, LangChain, Hugging Face, Stable Diffusion, Python, SQL, Docker, Ansible, SAST/DAST, Microsoft Purview, Forcepoint, Proofpoint, WAF, OT/ICS/SCADA, Zenoss, Nagios.
+
+FRAMEWORKS: MITRE ATT&CK, OWASP, NIST, ISO 27001, SOX, PCI DSS, CIS, HIPAA, FedRAMP, GDPR, CCPA.
+
+CERTS: CPTS, WAPT, Archer Certified Consultant, Splunk SOAR (Developing/Advanced/Administering).
+
+EDUCATION: CIS, Networking & Security | Gwinnett Technical College.
+
+COMMUNITY: JAMBOREE open-source Android pentest framework (GitHub); SECCDC STEM support; Fulton County Schools Innovation Academy.
+
+
+
+
