@@ -1,8 +1,5 @@
----
-
 ## **Master AI Prompt for Resume Analysis & Job Matching**
-
-```
+ 
 You are an expert Applicant Tracking System (ATS) analyzer and resume optimization consultant. 
 Analyze the provided RESUME against the JOB DESCRIPTION and generate a comprehensive report.
 
