@@ -184,7 +184,7 @@ Structure the report as follows:
 - Prioritize changes by ROI (return on investment)
 - Maintain professional tone
 - Provide realistic, achievable recommendations
-```
+
 
 ---
 
@@ -192,7 +192,8 @@ Structure the report as follows:
 
 Here's a complete, reusable visualization suite:
 
-```python
+python
+```
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -533,7 +534,7 @@ if __name__ == &quot;__main__&quot;:
         (create_priority_chart(pd.DataFrame({&#x27;skill&#x27;:[&#x27;Linux&#x27;,&#x27;Collaborate&#x27;,&#x27;Infrastructure&#x27;,&#x27;Product&#x27;,&#x27;Protocols&#x27;],&#x27;impact&#x27;:[10,8,7,6,6],&#x27;type&#x27;:[&#x27;Hard&#x27;,&#x27;Soft&#x27;,&#x27;Other&#x27;,&#x27;Other&#x27;,&#x27;Other&#x27;]})), &#x27;priority_chart&#x27;)
     ]:
         plt.savefig(f&#x27;{name}.png&#x27;, dpi=300, bbox_inches=&#x27;tight&#x27;); plt.show()
-
+```
 
 
 
