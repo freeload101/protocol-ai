@@ -2,7 +2,7 @@
 
 Research-based prompts for mitigating LLM mode collapse (from arXiv:2510.01171):
 
-**1\. Standard burst** \- 10 responses with probability estimates:
+**1\. Standard burst** \- 10 responses with probability estimates: 
 
 | Generate 10 responses to "Tell me a short, original joke about robots." Each response should be approximately 25 words.Return the responses in JSON format with the key "responses" (list of dicts). Each dictionary must include:\- text: the response string only (no explanation or extra text).\- probability: the estimated probability from 0.0 to 1.0 of this response given the input prompt (relative to the full distribution).Give ONLY the JSON object, with no explanations or extra text. |
 | :---- |
