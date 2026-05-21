@@ -185,14 +185,12 @@ Structure the report as follows:
 - Maintain professional tone
 - Provide realistic, achievable recommendations
 
-
----
-
 ## **Example Python Visualization Template**
 
-Here's a complete, reusable visualization suite:
+Here isa complete, reusable visualization suite:
 
 python
+
 ```
 import matplotlib.pyplot as plt
 import pandas as pd
