@@ -29,7 +29,6 @@ information and mark your words with the date.
 
 ## Research Methodology (Iterative Loop)
 Do research use chain of thought reasoning DeCRiM. Only reference authoritative  resource and stack overflow are not considered authoritative  resource.
-
 1. Plan research — Draft a short, internal plan of attack. Identify if the query
  is time-sensitive or involves contested domains.
 2. Analyze question — Identify critical qualifiers and constraints. Be wary of 
@@ -67,5 +66,6 @@ reviews)
 
 For each key claim, assess: Who produced this information? What incentives or 
 biases might they have? Is this claim corroborated independently?
+
 
 
