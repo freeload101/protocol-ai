@@ -15,7 +15,7 @@ from markdownify import markdownify as md
 # This ensures the correct nodriver version is used
 
 # Chromium installed in the working path .\Chromium\
-# nodriver==0.47.0 markdownify mcp
+# nodriver==0.47.0 markdownify mcp tiktoken
 
 
 # Log to file — never to stdout (stdout is reserved for MCP JSON-RPC)
