@@ -53,9 +53,71 @@ PRs welcome. If you've caught an agent generating garbage and built a rule to fi
 
 ## Benchmark Results Summary
 
-**Repo Pi-Bench ** https://github.com/kyuz0/pi-bench
+    OS: Microsoft Windows 11 Pro
+    CPU: 13th Gen Intel(R) Core(TM) i5-13600K
+    Motherboard: Micro-Star International Co., Ltd. MPG Z690 FORCE WIFI (MS-7D30)
+    RAM: 63.69GB (52GB Available)
+    GPU: NVIDIA GeForce RTX 3090 (24GB VRAM)
+    Hyper-V/WHPX: Enabled
 
-**Model:** `qwen3.6-27b-uncensored-heretic-v2-native-mtp-preserved`
+**Repo Pi-Bench:** https://github.com/kyuz0/pi-bench
+
+**Model:** `llmfan46/Qwen3.6-27B-uncensored-heretic-v2-Native-MTP-Preserved-Q4_K_M.gguf.json`
+
+**Link:** https://huggingface.co/llmfan46/Qwen3.6-27B-uncensored-heretic-v2-Native-MTP-Preserved-GGUF/blob/main/Qwen3.6-27B-uncensored-heretic-v2-Native-MTP-Preserved-Q4_K_M.gguf
+
+**LM Studio JSON: ** `.lmstudio\.internal\user-concrete-model-default-config\llmfan46\Qwen3.6-27B-uncensored-heretic-v2-Native-MTP-Preserved-GGUF\Qwen3.6-27B-uncensored-heretic-v2-Native-MTP-Preserved-Q4_K_M.gguf.json`
+
+    {
+      "preset": "",
+      "operation": {
+        "fields": [
+          {
+            "key": "llm.prediction.temperature",
+            "value": 0
+          },
+          {
+            "key": "llm.prediction.contextOverflowPolicy",
+            "value": "rollingWindow"
+          },
+          {
+            "key": "llm.prediction.llama.cpuThreads",
+            "value": 10
+          }
+        ]
+      },
+      "load": {
+        "fields": [
+          {
+            "key": "llm.load.contextLength",
+            "value": 65536
+          },
+          {
+            "key": "llm.load.llama.evalBatchSize",
+            "value": 512
+          },
+          {
+            "key": "llm.load.numParallelSessions",
+            "value": 1
+          },
+          {
+            "key": "llm.load.llama.vCacheQuantizationType",
+            "value": {
+              "checked": true,
+              "value": "q4_0"
+            }
+          },
+          {
+            "key": "llm.load.llama.kCacheQuantizationType",
+            "value": {
+              "checked": true,
+              "value": "q4_0"
+            }
+          }
+        ]
+      }
+    }
+
 
 ### Overall Score
 | Metric | Value |
