@@ -28,9 +28,10 @@ log = logging.getLogger("kagi-mcp")
 
 app = Server("kagi-search")
 
-RESULTS_DIR = r".\results"
-BROWSER_PATH = r".\Chromium\Application\chrome.exe"
-USER_DATA_DIR = r".\Default"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+RESULTS_DIR = os.path.join(SCRIPT_DIR, "results")
+BROWSER_PATH = os.path.join(SCRIPT_DIR, "Chromium", "Application", "chrome.exe")
+USER_DATA_DIR = os.path.join(SCRIPT_DIR, "Default")
 
 
 async def launch_browser():
@@ -54,7 +55,7 @@ async def run_search(search_query: str, lines_to_return: int, verbose: bool) -> 
     current_run_ref_files: list[str] = []
 
     try:
-        tab = await browser.get(f"https://kagi.com/search?token=AAAAAAAAAAAAAAAAAAAAAAAAAAAAADERPAAAAAAAAAAAAAA&q={search_query}")
+        tab = await browser.get(f"https://kagi.com/search?q={search_query}")
         await asyncio.sleep(random.randint(1, 2))
 
         # Click Quick Answer button
@@ -130,29 +131,45 @@ async def run_search(search_query: str, lines_to_return: int, verbose: bool) -> 
         else:
             log.warning("No reference links found")
 
-        # Export Quick Answer content to markdown (saved to disk only, not returned to LLM)
+        # Extract Quick Answer content and include it in the output
         content_script = """
             (() => {
                 const contentBox = document.querySelector('.qa-content')
                                 || document.querySelector('.qa-container-box');
-                return contentBox ? contentBox.innerHTML : document.body.innerHTML;
+                return contentBox ? contentBox.innerText : 'No Quick Answer found';
+            })()
+        """
+        qa_text = ""
+        try:
+            qa_text = await tab.evaluate(content_script)
+            log.info("Extracted Quick Answer text")
+        except Exception as e:
+            log.error(f"Failed to extract Quick Answer: {e}\n{traceback.format_exc()}")
+
+        # Also save full HTML version to disk for reference
+        html_script = """
+            (() => {
+                const contentBox = document.querySelector('.qa-content')
+                                || document.querySelector('.qa-container-box');
+                return contentBox ? contentBox.innerHTML : '';
             })()
         """
         qa_filepath = os.path.join(RESULTS_DIR, "quick_answer_output.md")
         try:
-            html_content = await tab.evaluate(content_script)
+            html_content = await tab.evaluate(html_script)
             markdown_content = md(html_content)
             with open(qa_filepath, "w", encoding="utf-8") as f:
                 f.write(markdown_content)
-            log.info("Saved Quick Answer content to quick_answer_output.md (excluded from LLM output)")
+            log.info("Saved Quick Answer content to quick_answer_output.md")
         except Exception as e:
             log.error(f"Failed to export Quick Answer: {e}\n{traceback.format_exc()}")
 
         await asyncio.sleep(1)
 
-        # Build return string using only current-run reference files
-        # quick_answer_output.md is intentionally excluded from LLM output
+        # Build return string: Quick Answer first, then reference files
         output_parts = []
+        if qa_text and qa_text != 'No Quick Answer found':
+            output_parts.append(f"## Quick Answer\n\n{qa_text}")
 
         # Sort by reference index (reference_1_..., reference_2_..., etc.)
         for ref_file in sorted(current_run_ref_files, key=lambda x: int(x.split("_")[1])):
