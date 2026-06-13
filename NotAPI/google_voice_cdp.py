@@ -78,12 +78,15 @@ class MessageResult:
 @dataclass
 class Conversation:
     thread_id: str
+    thread_url: str          # full URL with itemId (e.g. t.+1678... or g.Group%20Message.F9ePpy...)
+    thread_type: str         # "direct" | "group" | "voicemail"
     participants: list[str]
     last_message: str
-    timestamp: str       # relative from DOM ("5:12 PM")
-    iso_timestamp: str   # ISO 8601 UTC (computed)
+    timestamp: str           # relative from DOM ("5:12 PM")
+    iso_timestamp: str       # ISO 8601 UTC (computed)
     snippet: str = ""
-    messages: list[str] = ()  # last N messages for context
+    messages: list[dict] = ()  # [{from, text, direction}] for richer context
+    message_count: int = 0     # total messages in thread (for AI context depth)
 
 
 @dataclass
@@ -269,11 +272,23 @@ class GoogleVoiceCDP:
     # ---- read conversations -----------------------------------------------
 
     async def get_conversations(self, limit: int = 10) -> list[Conversation]:
-        """Get recent conversation threads."""
+        """Get recent conversation threads with full context.
+
+        Classifies each thread by type:
+          - "direct":  two-party chat (itemId starts with t.)
+          - "group":   group text (itemId starts with g.)
+          - "voicemail": voicemail messages (from /voicemail page)
+
+        Each Conversation includes:
+          - thread_url: full URL for re-opening the thread
+          - thread_type: classification for AI routing
+          - messages: list of {from, text, direction} dicts for conversation history
+          - message_count: total incoming message count (context depth indicator)
+        """
         await self.client.navigate(self.MESSAGES_URL)
         await asyncio.sleep(3)
 
-        # Step 1: Get thread list with participants from <gv-annotation class="participants">
+        # Step 1: Get thread list with URLs, participants, and type classification
         js_code = r"""JSON.stringify(
             Array.from(document.querySelectorAll('li.list-item'))
                 .map(el => {
@@ -281,22 +296,35 @@ class GoogleVoiceCDP:
                     const lines = text.split('\n').map(l=>l.trim()).filter(Boolean);
                     // Skip icon-only lines
                     const content = lines.filter(l => !/^(person|R|J|C|M|A|V|T|B|K|D)$/.test(l));
+
                     // Get participants from annotation element (handles groups properly)
                     const annEl = el.querySelector('gv-annotation.participants');
                     const rawParticipants = annEl ? annEl.innerText.trim() : content[0] || '';
-                    // Parse comma-separated participants
                     const participants = rawParticipants.split(',').map(p=>p.trim()).filter(Boolean);
+
+                    // Extract thread URL from the link to get itemId for type classification
+                    const link = el.querySelector('a[href*="itemId"]');
+                    const href = link ? link.getAttribute('href') : '';
+                    const itemId = new URLSearchParams(href.split('?')[1] || '').get('itemId') || '';
+
+                    // Classify thread type from itemId prefix
+                    let threadType = 'direct';  // default: two-party chat (t.)
+                    if (itemId.startsWith('g.')) {
+                        threadType = 'group';    // group text (g.)
+                    }
+
                     const phone = content.find(l => /\(?[0-9]{3}\)?/.test(l)) || '';
                     const timestamp = content.find(l => /[apAP][mM]$/.test(l)) || '';
-                    return {participants, phone, timestamp};
+
+                    return {participants, threadUrl: href, itemId, threadType, phone, timestamp};
                 }).slice(0, LIMIT_PLACEHOLDER)
         )"""
         js_code = js_code.replace("LIMIT_PLACEHOLDER", str(limit))
 
         threads_meta = await self.client.ev(js_code)
 
-        # Step 2: For each thread, click into it and extract last N messages from .bubble elements
-        MAX_MSGS_PER_THREAD = 5
+        # Step 2: For each thread, click into it and extract messages with sender info
+        MAX_MSGS_PER_THREAD = 8  # increased for richer AI context
         convs = []
         for idx, meta in enumerate(threads_meta):
             # Click on this thread to open it
@@ -306,39 +334,154 @@ class GoogleVoiceCDP:
             })
             await asyncio.sleep(2)
 
-            # Extract only INCOMING messages via .full-container.incoming class
-            # This auto-filters out outgoing ("You") messages entirely
+            # Extract ALL messages (incoming + outgoing) with sender/direction info
+            # This gives AI full conversation context to decide actions
             bubbles_js = r"""JSON.stringify(
-                Array.from(document.querySelectorAll('.full-container.incoming'))
+                Array.from(document.querySelectorAll('.full-container'))
                     .map(el => {
                         const bubble = el.querySelector('.bubble');
-                        return bubble ? bubble.innerText.trim() : '';
+                        if (!bubble) return null;
+                        const text = bubble.innerText.trim();
+                        // Determine direction: outgoing has 'outgoing' class, incoming has 'incoming'
+                        const isOutgoing = el.classList.contains('outgoing') || el.classList.contains('sent');
+                        const isIncoming = el.classList.contains('incoming') || el.classList.contains('received');
+
+                        // Try multiple selectors for sender name (Google Voice uses different classes)
+                        let sender = '';
+                        if (!isOutgoing) {
+                            // PRIMARY: Look for hidden accessibility div with "Message from X, ..."
+                            const hiddenDiv = el.querySelector('.cdk-visually-hidden');
+                            if (hiddenDiv) {
+                                const match = hiddenDiv.innerText.match(/^Message from\s+(.+?),/i);
+                                if (match) sender = match[1].trim();
+                            }
+                            // FALLBACK: Check all possible sender-name locations inside the message container
+                            if (!sender) {
+                                const candidates = [
+                                    '.participant',
+                                    '.sender-name',
+                                    '[class*="from"]',
+                                    '[class*="name"]',
+                                    'span[class*="participant"]',
+                                    'div[class*="label"]',
+                                    '.message-sender',
+                                ];
+                                for (const sel of candidates) {
+                                    const found = el.querySelector(sel);
+                                    if (found && found.innerText.trim().length > 0) {
+                                        sender = found.innerText.trim();
+                                        break;
+                                    }
+                                }
+                            }
+                            // LAST RESORT: try ALL spans/divs for phone numbers or names
+                            if (!sender) {
+                                const allChildren = Array.from(el.querySelectorAll('span, div'));
+                                for (const child of allChildren) {
+                                    const t = child.innerText.trim();
+                                    // Look for phone number patterns or non-empty labels
+                                    if (/\(?[0-9]{3}\)?/.test(t) || /^[A-Z][a-z]/.test(t)) {
+                                        // Extract just the first line (sender name/phone, not timestamp/message)
+                                        const lines = t.split('\n').map(l=>l.trim()).filter(Boolean);
+                                        let s = lines[0] || t;
+                                        // Strip "Message from X, ..." prefix to get clean sender
+                                        const match2 = s.match(/^Message from\s+(.+?),/i);
+                                        if (match2) s = match2[1].trim();
+                                        sender = s;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        return {text: text || '', direction: isOutgoing ? 'outgoing' : (isIncoming ? 'incoming' : 'unknown'), from: sender};
                     })
-                    .filter(t => t.length > 0)
+                    .filter(m => m && m.text.length > 0)
             )"""
-            all_bubbles = await self.client.ev(bubbles_js)
+            all_messages = await self.client.ev(bubbles_js) or []
 
-            # Filter out noise: reactions, empty messages (no "You:" needed since incoming-only)
+            # Determine the "other person" label for direct threads (fallback when DOM has no sender)
+            # For direct chats: participants list may include phone numbers, "+N", and MFA labels
+            # Strip those to get clean name(s). If only 1 real name remains, use it as fallback.
+            import re as _re
+            participant_names = [
+                p for p in meta.get("participants", [])
+                if not _re.match(r'^\(?[0-9]', p)   # strip phone numbers like (207)... or +1...
+                and 'MFA' not in p                    # strip MFA labels
+                and not _re.match(r'^\+\d+$', p)     # strip "+4" style group indicators
+            ]
+            direct_other_name = participant_names[0] if len(participant_names) == 1 else ""
+
+            # Build a set of known phone numbers from participants (for group chat sender matching)
+            participant_phones = [
+                p for p in meta.get("participants", [])
+                if _re.match(r'^\(?[0-9]', p) and 'MFA' not in p
+            ]
+
+            # Filter out noise: reactions, emoji-only, liked/disliked messages
             clean_msgs = []
-            for msg in all_bubbles:
-                # Skip reaction-only entries ("Loved", "liked", "Reacted", "Laughed at")
-                if msg.lower().startswith(("loved", "liked", "reacted", "laughed")):
+            for msg in all_messages:
+                text = msg["text"]
+                text_stripped = text.strip()
+                text_lower = text_stripped.lower()
+                # Skip reaction-only entries (Loved, Liked, Reacted, Laughed, Disliked)
+                if text_lower.startswith(("loved", "liked", "reacted", "laughed", "disliked")):
                     continue
-                if len(msg) > 0:
-                    clean_msgs.append(msg)
+                # Skip emoji-only messages (strip all non-emoji chars and check)
+                stripped = _re.sub(r'[\w\s]', '', text).strip()
+                if len(text) <= 4 and not text.isascii():
+                    continue
+                # Skip "to \"...\"" reaction references (Google Voice reaction metadata)
+                if text_lower.startswith("to "):
+                    continue
+                if len(msg["text"]) > 0:
+                    sender_label = msg.get("from", "")
+                    # Normalize sender: strip ALL whitespace variants (regular, zero-width, thin spaces) for phone matching
+                    sender_cleaned = _re.sub(r'[\s\u200b\u200a\u200c\u200d\ufeff]+', '', sender_label)
+                    if not sender_label:
+                        # Fallback: use direct chat partner name, or "You" for outgoing
+                        if msg["direction"] == "outgoing":
+                            sender_label = "You"
+                        elif direct_other_name:
+                            sender_label = direct_other_name
+                        else:
+                            sender_label = "Other"
+                    # Normalize phone-like senders to standard (XXX) XXX-XXXX format
+                    # Strip everything except digits for comparison
+                    sender_digits = _re.sub(r'[^\d]', '', sender_label)
+                    if len(sender_digits) == 10:
+                        # Format as (XXX) XXX-XXXX
+                        sender_label = f"({sender_digits[:3]}) {sender_digits[3:6]}-{sender_digits[6:]}"
+                    elif participant_phones and sender_digits:
+                        matched_phone = None
+                        for p in participant_phones:
+                            p_digits = _re.sub(r'[^\d]', '', p)
+                            if p_digits and sender_digits == p_digits:
+                                matched_phone = p
+                                break
+                        if matched_phone:
+                            sender_label = matched_phone
+                    clean_msgs.append({
+                        "from": sender_label,
+                        "text": msg["text"],
+                        "direction": msg["direction"],
+                    })
 
-            # Take last N messages
+            # Take last N messages for AI context window
             recent = clean_msgs[-MAX_MSGS_PER_THREAD:] if clean_msgs else []
-            snippet = recent[-1] if recent else (meta["participants"][0] if meta["participants"] else "")
+            snippet = recent[-1]["text"] if recent else (meta["participants"][0] if meta.get("participants") else "")
 
             convs.append(Conversation(
-                thread_id="",
+                thread_id=meta.get("itemId", f"thread_{idx}"),
+                thread_url=meta.get("threadUrl", self.MESSAGES_URL),
+                thread_type=meta.get("threadType", "direct"),
                 participants=[clean(p) for p in meta.get("participants", [])],
                 last_message=clean(snippet),
                 timestamp=meta.get("timestamp", ""),
                 iso_timestamp=resolve_timestamp(meta.get("timestamp", "now")),
                 snippet=clean(snippet),
-                messages=[clean(m) for m in recent],
+                messages=[{"from": clean(m["from"]), "text": clean(m["text"]), "direction": m["direction"]} for m in recent],
+                message_count=len(clean_msgs),  # total incoming count for context depth
             ))
 
             # Navigate back to list view for next thread
@@ -537,7 +680,13 @@ class GoogleVoiceCDP:
 # ---------------------------------------------------------------------------
 
 async def run_worker(gv: GoogleVoiceCDP) -> None:
-    """Ingest conversations + voicemails, dedup, write to .staging_queue/inbox_sms.json."""
+    """Ingest conversations + voicemails, dedup, write to .staging_queue/inbox_sms.json.
+
+    Each message now includes:
+      - thread_type: "direct", "group", or "voicemail" (for AI routing)
+      - conversation_context: last N messages with sender/direction for AI context
+      - action_hint: suggested action based on thread type and recency
+    """
     import hashlib
 
     now = datetime.now(timezone.utc)
@@ -548,42 +697,72 @@ async def run_worker(gv: GoogleVoiceCDP) -> None:
     convs = await gv.get_conversations(limit=20)
     vms = await gv.get_voicemails(limit=10)
 
-    # Build message list in gmail_worker-compatible format
+    # Build message list in gmail_worker-compatible format with AI context
     messages = []
 
     for c in convs:
         sender = ", ".join(c.participants)
 
         # Use multi-message context if available, otherwise just last_message
-        msgs = list(c.messages) if c.messages else [clean(c.last_message)]
+        msgs = list(c.messages) if c.messages else [{"from": "Other", "text": clean(c.last_message), "direction": "incoming"}]
 
         # Filter out noise from all messages
-        # Note: "You:" self-replies already filtered by .full-container.incoming selector
+        import re as _re
         clean_msgs = []
         for msg in msgs:
-            # Skip social media reactions ("Loved", "liked", "Reacted", "Laughed at")
-            if msg.lower().startswith(("loved", "liked", "reacted", "laughed")):
+            text = msg["text"] if isinstance(msg, dict) else str(msg)
+            text_stripped = text.strip()
+            text_lower = text_stripped.lower()
+            # Skip social media reactions ("Loved", "liked", "Reacted", "Laughed at", "Disliked")
+            if text_lower.startswith(("loved", "liked", "reacted", "laughed", "disliked")):
+                continue
+            # Skip "to \"...\"" reaction references (Google Voice reaction metadata)
+            if text_lower.startswith("to "):
                 continue
             # If body is just the sender name, skip it (no actual message content)
-            if msg.strip() == sender.strip():
+            if text.strip() == sender.strip():
                 continue
-            clean_msgs.append(clean(msg))
+            clean_msgs.append(msg if isinstance(msg, dict) else {"from": "Other", "text": text, "direction": "incoming"})
 
         if not clean_msgs:
             continue
 
-        # Join messages with separator for context
-        body = "\n".join(clean_msgs)
+        # Build conversation context string for AI: shows who said what in order
+        context_lines = []
+        for msg in clean_msgs:
+            direction_label = msg.get("direction", "unknown")
+            sender_label = msg.get("from", "Other")
+            text = msg["text"]
+            if direction_label == "outgoing":
+                context_lines.append(f"You: {text}")
+            else:
+                context_lines.append(f"{sender_label}: {text}")
+
+        body = "\n".join(context_lines)
+
+        # Determine action hint based on thread type and message count
+        if c.thread_type == "group":
+            action_hint = "review_group_context"  # group threads need full context review
+        elif c.message_count > 5:
+            action_hint = "review_long_thread"   # long threads may need summary
+        else:
+            action_hint = "direct_reply_or_ignore"  # simple direct chat
 
         msg = {
-            "message_id": f"gv_thread_{c.snippet[:30].replace(' ', '_')}",
+            "message_id": f"gv_{c.thread_type}_{c.thread_id}",
             "date": c.iso_timestamp,
             "sender": sender,
-            "subject": "",
+            "subject": f"[{c.thread_type.upper()}] {sender}" if c.thread_type != "direct" else "",
             "body_plain": body,
             "_filtered_weight": 85,
-            "_filter_tags": ["sms"],
+            "_filter_tags": ["sms", c.thread_type],
             "account_id": "google_voice",
+            # AI context fields
+            "thread_type": c.thread_type,
+            "thread_url": c.thread_url,
+            "conversation_context": clean_msgs,  # list of {from, text, direction}
+            "message_count": c.message_count,
+            "action_hint": action_hint,
         }
         messages.append(msg)
 
@@ -601,11 +780,15 @@ async def run_worker(gv: GoogleVoiceCDP) -> None:
             "message_id": msg_id,
             "date": vm.iso_timestamp,
             "sender": sender_name,
-            "subject": "",
+            "subject": f"[VOICEMAIL] {sender_name}",
             "body_plain": f"[VOICEMAIL] {clean(vm.transcription)}",
             "_filtered_weight": 95,
             "_filter_tags": ["sms", "voicemail"],
             "account_id": "google_voice",
+            # AI context fields
+            "thread_type": "voicemail",
+            "conversation_context": [{"from": sender_name, "text": clean(vm.transcription), "direction": "incoming"}],
+            "action_hint": "review_voicemail",  # voicemails always need review
         }
         messages.append(msg)
 
