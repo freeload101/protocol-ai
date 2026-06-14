@@ -150,15 +150,16 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    A[run_worker] --> B[navigate VOICEMAIL_URL]
-    B --> C[querySelectorAll gv-annotation.preview]
-    C --> D[parse name, phone, timestamp, duration, transcription]
-    D --> E[resolve_timestamp → ISO 8601 UTC]
-    E --> F{has transcription?}
-    F -->|yes| G[stage as [VOICEMAIL] msg]
-    F -->|no| H[skip — no content to stage]
-    G --> I[dedup vs ledger timestamp]
-    I --> J[write inbox_sms.json]
+    A["run_worker"] --> B["navigate VOICEMAIL_URL"]
+    B --> C["querySelectorAll gv-annotation.preview"]
+    C --> D["parse name, phone, timestamp, duration, transcription"]
+    D --> E["resolve_timestamp - ISO 8601 UTC"]
+    E --> F{"has transcription?"}
+    F -->|yes| G["stage as VOICEMAIL msg"]
+    F -->|no| H["skip - no content to stage"]
+    G --> I["dedup vs ledger timestamp"]
+    I --> J["write inbox_sms.json"]
+
 ```
 
 ---
