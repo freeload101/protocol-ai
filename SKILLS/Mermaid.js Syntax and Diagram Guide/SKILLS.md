@@ -1,5 +1,7 @@
 # 🧜 Mermaid.js — Complete AI Skill Reference
 
+Example PDF from Obsidian: [Mermaid.js Syntax and Diagram Guide.pdf](https://raw.githubusercontent.com/freeload101/Protocol-AI/refs/heads/main/SKILLS/Mermaid.js%20Syntax%20and%20Diagram%20Guide/Mermaid.js%20Syntax%20and%20Diagram%20Guide.pdf)
+
 ## General Structure
 
 Every Mermaid diagram starts with a **diagram type declaration**. The code is wrapped in a fenced code block using ` ```mermaid ` in Markdown.
